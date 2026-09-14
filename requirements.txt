@@ -1,0 +1,7 @@
+# Runtime dependencies for Mei Asahina Discord bot
+discord.py>=2.3.0
+httpx>=0.28.0
+pillow>=10.0.0
+opencv-python-headless>=4.9.0
+python-dotenv>=1.0.0
+ddgs>=9.0.0

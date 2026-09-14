@@ -1,0 +1,33 @@
+# Python cache and environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+
+# Environment secrets
+.env
+.env.local
+
+# Local SQLite databases and persistent memories
+*.db
+*.sqlite
+*.sqlite3
+data/
+users.md
+
+# Keep example files tracked
+!users.example.md
+!.env.example
+
+# OS and Editor artifacts
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+.vscode/
+.idea/
+
+# Ignore Training folder
+Mei-Training/
