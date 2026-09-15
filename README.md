@@ -13,39 +13,39 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-purple.svg" alt="License" /></a>
 </p>
 
-An autonomous Discord bot built for local LLM inference, featuring persistent SQLite memory, multimodal vision and video support, real-time web search fallback, and a distinct anime catgirl persona.
+A Discord companion bot powered by local LLM backends (LM Studio, Ollama, or vLLM). Mei keeps track of user details in SQLite, processes images and video clips, pulls live web context through DuckDuckGo, and speaks with a sharp, casual catgirl personality.
 
 ---
 
 ## Overview
 
-Mei Asahina is a Discord companion designed to run entirely against local or self-hosted model backends (such as LM Studio, Ollama, or vLLM). Unlike standard assistant bots, Mei has an opinionated, feline personality with casual speech patterns, light snark, and natural conversational quirks.
+Project Mei connects Discord to a local OpenAI-compatible inference server. Instead of acting like a bland assistant, Mei talks like a sarcastic friend who happens to have cat ears. Because the model runs locally, your chat logs, user notes, and media stay on your own hardware.
 
-### Model Recommendations & Training Note
+### Model Notes
 
-- **Recommended Models**: For local consumer hardware, small models such as **Qwen3.5-4B** (or Qwen 2.5 3B / 7B) are strongly recommended. A 4B parameter model runs with minimal VRAM usage (fits comfortably on 6 GB–8 GB cards), maintains low latency on single-message Discord turns, and follows structured instructions reliably.
-- **Custom Training Disclaimer**: Mei was originally developed using a custom-trained / fine-tuned model specifically adapted to her character voice and mannerisms. The system prompt and sampling configurations in this repository provide a working baseline for general open-weight models, but the exact prompt and output style may differ slightly from the private custom-trained setup.
+- **Recommended Setup**: Small models like **Qwen 3.5 4B** (or Qwen 2.5 3B / 7B) work best. A 4B model uses 6 GB to 8 GB of VRAM, answers single Discord messages with low latency, and handles structured XML tags without breaking syntax.
+- **Custom Fine-Tune Note**: I originally made Mei using a private fine-tune built for her character voice. The system prompt and sampling settings in this repo work well on stock open-weight models, but expect minor voice differences compared to the private checkpoint.
 
 ---
 
 ## Features
 
-- **Multimodal Support (Images & Video)**:
-  - Supports image attachments (`.png`, `.jpg`, `.webp`) by resizing and encoding them for vision-capable endpoints.
-  - Handles video files (`.mp4`, `.mov`, `.webm`) by using OpenCV to extract representative keyframes across the clip duration, allowing vision models to understand video context.
-- **Persistent Memory (SQLite + Markdown Export)**:
-  - Uses an ACID-compliant SQLite datastore (`data/mei_memory.db`) running in WAL mode for memory persistence.
-  - Automatically syncs memory state into a clean, human-readable Markdown file (`users.md`).
-  - Mei records details autonomously using `<remember>` tags.
-  - **Mutable Observations**: Memories are framed as Mei's own observational notes rather than immutable rules, allowing her to adapt naturally when someone updates their preferences or corrects a detail.
-- **Web Search Fallback**:
-  - Automatically detects when a topic requires external knowledge (unfamiliar media, release dates, or specific character names) using `<search>query</search>` tags.
-  - Queries DuckDuckGo and caches results for 10 minutes to avoid rate limits and unnecessary network calls.
-- **Clean Non-Streaming Output**:
-  - Waits for full model generation before posting to Discord, avoiding message-editing jitter.
-  - Reasoning traces (`<think>` blocks) are filtered from chat and logged directly to the local terminal console.
-- **Owner-Exclusive Commands**:
-  - Slash commands (`/facts` and `/reset`) are restricted to the bot owner (`DT_USER_ID`) with in-character rejections for other users.
+- **Image & Video Vision**:
+  - Resizes and base64-encodes `.png`, `.jpg`, and `.webp` attachments for vision models.
+  - Extracts keyframes across `.mp4`, `.mov`, and `.webm` clips with OpenCV so vision models can see actions in video.
+- **Persistent Memory (SQLite + Markdown)**:
+  - Stores user facts in SQLite (`data/mei_memory.db`) using WAL mode.
+  - Exports an up-to-date summary to `users.md` so you can read or edit what she knows in plain text.
+  - Mei decides what to save during chat using `<remember>` tags.
+  - Treats saved notes as observations rather than immutable rules. If you correct her or change your mind, she updates the entry.
+- **DuckDuckGo Search**:
+  - Emits `<search>query</search>` tags when she hits unfamiliar media, release dates, or names.
+  - Caches search queries for 10 minutes to avoid rate limits.
+- **Terminal-Only Thinking**:
+  - Strips `<think>` blocks before sending replies to Discord and logs the full reasoning trace to your terminal.
+  - Posts finished replies instead of streaming edits to prevent Discord chat jitter.
+- **Admin Commands**:
+  - Locks `/facts` and `/reset` to your user ID (`DT_USER_ID`). Other users get an in-character brush-off.
 
 ---
 
@@ -70,7 +70,7 @@ flowchart TD
     end
 
     subgraph Backend["Inference Server"]
-        Bot <-->|POST /v1/chat/completions| Engine["LM Studio / Ollama / vLLM<br/>(Qwen3.5-4B)"]
+        Bot <-->|POST /v1/chat/completions| Engine["LM Studio / Ollama / vLLM<br/>(Qwen 3.5 4B)"]
     end
 ```
 
@@ -80,11 +80,11 @@ flowchart TD
 
 ### 1. Requirements
 - Python 3.11 or higher (or [uv](https://github.com/astral-sh/uv))
-- A running OpenAI-compatible local inference server (LM Studio, Ollama, or vLLM) on port `1234` (or configured URL)
-- A Discord Bot Token with Message Content and Server Members intents enabled
+- A local OpenAI-compatible inference server running on port 1234 or your configured URL (LM Studio, Ollama, or vLLM)
+- A Discord bot token with Message Content and Server Members intents enabled
 
 ### 2. Setup
-Clone the repository:
+Clone the repo:
 ```bash
 git clone https://github.com/ItsDTYT/Project-Mei.git
 cd Project-Mei
@@ -95,7 +95,7 @@ Create your configuration file from the template:
 cp .env.example .env
 ```
 
-Open `.env` and fill in your credentials:
+Set your configuration values in `.env`:
 ```ini
 DISCORD_BOT_TOKEN=your_discord_bot_token
 DT_USER_ID=your_discord_numeric_id
@@ -105,10 +105,10 @@ LM_STUDIO_MODEL=qwen3.5-4b
 
 ### 3. Running
 
-#### Option 1: Windows Batch Script
-Double-click `run_discord_mei.bat`. If a virtual environment is not found, the script will automatically initialize one using `uv` and install dependencies.
+#### Option A: Windows Script
+Double-click `run_discord_mei.bat`. If no virtual environment exists, the script creates one using `uv` and installs dependencies.
 
-#### Option 2: Standard Python Virtual Environment
+#### Option B: Virtual Environment
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
@@ -116,22 +116,22 @@ pip install -r requirements.txt
 python discord_mei.py
 ```
 
-#### Option 3: Docker
+#### Option C: Docker
 ```bash
 docker compose up -d
 ```
 
 ---
 
-## Memory & Dossier System
+## Memory System
 
-When users mention personal details or preferences in conversation, Mei extracts and stores them via inline XML tags:
+When a user mentions facts or preferences, Mei saves them with inline XML tags:
 
 ```xml
 <remember user="DT" cat="gaming">favorite game is the binding of isaac</remember>
 ```
 
-These are saved into SQLite and automatically reflected in `users.md`:
+The bot writes these entries to SQLite and updates `users.md`:
 
 ```markdown
 ## User: ItsDT (ID: 897711166967664690)
@@ -140,26 +140,26 @@ These are saved into SQLite and automatically reflected in `users.md`:
   - favorite game is the binding of isaac
 ```
 
-> **Privacy Note**: `.env`, `data/mei_memory.db`, and `users.md` are excluded by `.gitignore` by default so personal notes and tokens stay strictly local.
+> **Privacy Note**: `.env`, `data/mei_memory.db`, and `users.md` stay in `.gitignore` by default so your credentials and personal notes never get pushed to git.
 
 ---
 
 ## Commands
 
-Commands are implemented as Discord Slash Commands (`/`) and restricted to the designated creator ID:
+Slash commands (`/`) are restricted to the owner ID specified in your `.env`:
 
 | Command | Description | Access |
 | :--- | :--- | :--- |
-| `/facts [user]` | Displays the recorded dossier notes for yourself or a selected user. | Owner Only |
-| `/reset` | Clears the short-term conversation context for the current channel or DM. | Owner Only |
+| `/facts [user]` | Shows dossier notes for yourself or another user. | Owner Only |
+| `/reset` | Clears recent conversation history in the current channel or DM. | Owner Only |
 
-Legacy text prefixes (`!facts`, `!reset`) are also supported as fallbacks for the owner.
+Prefix fallbacks (`!facts`, `!reset`) are also available for the bot owner.
 
 ---
 
-## Recommended Sampling Parameters (Qwen 3.5 4B)
+## Sampling Settings (Qwen 3.5 4B)
 
-The default parameters in `discord_mei.py` and `.env.example` are tuned for Qwen 3.5 4B:
+The default parameters in `discord_mei.py` and `.env.example` target Qwen 3.5 4B:
 
 ```ini
 TEMPERATURE=0.75
@@ -169,9 +169,9 @@ MIN_P=0.05
 REPETITION_PENALTY=1.05
 ```
 
-- **Top-K (`20`)**: Recommended for Qwen 3.5 architectures to prevent hallucination in conversational responses.
-- **Repetition Penalty (`1.05`)**: Provides subtle loop prevention without penalizing common grammatical words.
-- **Min-P (`0.05`)**: Dynamically cuts off low-probability tail tokens based on the top token's confidence.
+- **Top-K (20)**: Keeps Qwen focused and stops responses from drifting off-topic.
+- **Repetition Penalty (1.05)**: Cuts down repetitive phrasing without making common words sound stiff.
+- **Min-P (0.05)**: Removes low-confidence tail tokens based on the top token score.
 
 ---
 
