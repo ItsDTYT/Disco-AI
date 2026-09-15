@@ -350,7 +350,9 @@ tree = app_commands.CommandTree(client)
 @app_commands.describe(user="The user to check notes on (defaults to yourself)")
 async def slash_facts(interaction: discord.Interaction, user: discord.Member | None = None):
     if interaction.user.id != DT_USER_ID:
-        await interaction.response.send_message("nice try, dt only nya~", ephemeral=True)
+        await interaction.response.send_message(
+            "This command is restricted to the bot owner.", ephemeral=True
+        )
         return
 
     target = user or interaction.user
@@ -368,7 +370,9 @@ async def slash_facts(interaction: discord.Interaction, user: discord.Member | N
 )
 async def slash_reset(interaction: discord.Interaction):
     if interaction.user.id != DT_USER_ID:
-        await interaction.response.send_message("nice try, dt only nya~", ephemeral=True)
+        await interaction.response.send_message(
+            "This command is restricted to the bot owner.", ephemeral=True
+        )
         return
 
     ctx_key = (
@@ -528,7 +532,6 @@ async def on_message(message: discord.Message):
     clean_lower = clean_content.lower()
     if clean_lower in ["!reset", "!clear"]:
         if not is_dt:
-            await message.channel.send("nice try, dt only nya~")
             return
         conversations[context_key] = [{"role": "system", "content": MEI_SYSTEM_PROMPT}]
         await message.channel.send("cleared conversation memory.")
@@ -536,7 +539,6 @@ async def on_message(message: discord.Message):
 
     if clean_lower in ["!facts", "!whoami"]:
         if not is_dt:
-            await message.channel.send("nice try, dt only nya~")
             return
         async with memory_lock:
             card = user_manager.get_user_display_card(

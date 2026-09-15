@@ -19,33 +19,22 @@ A Discord companion bot powered by local LLM backends (LM Studio, Ollama, or vLL
 
 ## Overview
 
-Project Mei connects Discord to a local OpenAI-compatible inference server. Instead of acting like a bland assistant, Mei talks like a sarcastic friend who happens to have cat ears. Because the model runs locally, your chat logs, user notes, and media stay on your own hardware.
+Project Mei links Discord to an OpenAI-compatible local server. Mei speaks as a sarcastic companion with cat ears. The backend runs on your machine, keeping chat history, notes, and media on your own hardware.
 
 ### Model Notes
 
-- **Recommended Setup**: Small models like **Qwen 3.5 4B** (or Qwen 2.5 3B / 7B) work best. A 4B model uses 6 GB to 8 GB of VRAM, answers single Discord messages with low latency, and handles structured XML tags without breaking syntax.
-- **Custom Fine-Tune Note**: I originally made Mei using a private fine-tune built for her character voice. The system prompt and sampling settings in this repo work well on stock open-weight models, but expect minor voice differences compared to the private checkpoint.
+- **Recommended Setup**: Qwen 3.5 4B and Qwen 2.5 (3B or 7B) fit this project well. A 4B model takes 6 GB to 8 GB of VRAM, responds fast, and keeps XML tags intact.
+- **Custom Fine-Tune**: I built Mei around a private fine-tune for her voice. This repository includes prompts and sampling settings tuned for stock open-weight models, though tone will differ from the private checkpoint.
 
 ---
 
 ## Features
 
-- **Image & Video Vision**:
-  - Resizes and base64-encodes `.png`, `.jpg`, and `.webp` attachments for vision models.
-  - Extracts keyframes across `.mp4`, `.mov`, and `.webm` clips with OpenCV so vision models can see actions in video.
-- **Persistent Memory (SQLite + Markdown)**:
-  - Stores user facts in SQLite (`data/mei_memory.db`) using WAL mode.
-  - Exports an up-to-date summary to `users.md` so you can read or edit what she knows in plain text.
-  - Mei decides what to save during chat using `<remember>` tags.
-  - Treats saved notes as observations rather than immutable rules. If you correct her or change your mind, she updates the entry.
-- **DuckDuckGo Search**:
-  - Emits `<search>query</search>` tags when she hits unfamiliar media, release dates, or names.
-  - Caches search queries for 10 minutes to avoid rate limits.
-- **Terminal-Only Thinking**:
-  - Strips `<think>` blocks before sending replies to Discord and logs the full reasoning trace to your terminal.
-  - Posts finished replies instead of streaming edits to prevent Discord chat jitter.
-- **Admin Commands**:
-  - Locks `/facts` and `/reset` to your user ID (`DT_USER_ID`). Other users get an in-character brush-off.
+- **Image & Video Vision**: Encodes PNG, JPG, and WEBP attachments for vision models. Pulls keyframes from MP4, MOV, and WEBM clips using OpenCV.
+- **Persistent Memory (SQLite + Markdown)**: Writes facts to SQLite (`data/mei_memory.db`) in WAL mode. Exports plain text summaries to `users.md`. The model marks details to save with `<remember>` tags, and you can update entries by correcting her in chat.
+- **DuckDuckGo Search**: Triggers `<search>query</search>` tags when the prompt needs external facts, release dates, or names. Caches results for 10 minutes to stay clear of rate limits.
+- **Terminal-Only Thinking**: Strips `<think>` blocks from Discord messages and prints reasoning traces to the terminal. Posts finished replies to prevent chat jitter.
+- **Admin Commands**: Restricts `/facts` and `/reset` to `DT_USER_ID`.
 
 ---
 
@@ -139,8 +128,6 @@ The bot writes these entries to SQLite and updates `users.md`:
 - **Known Facts**:
   - favorite game is the binding of isaac
 ```
-
-> **Privacy Note**: `.env`, `data/mei_memory.db`, and `users.md` stay in `.gitignore` by default so your credentials and personal notes never get pushed to git.
 
 ---
 
