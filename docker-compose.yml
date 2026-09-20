@@ -1,15 +1,12 @@
-version: '3.8'
-
 services:
-  mei-bot:
+  disco-bot:
     build: .
-    container_name: mei-discord-bot
+    container_name: disco_ai_bot
     restart: unless-stopped
     env_file:
       - .env
     volumes:
       - ./data:/app/data
       - ./users.md:/app/users.md
-    # On Windows or Linux, extra_hosts or network_mode allows container to reach host LM Studio
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - ./prompt.txt:/app/prompt.txt
+    network_mode: host

@@ -1,14 +1,16 @@
-# Mei's Dossier: Known Users (Example)
+# User Dossier: Known Profiles
 
-This file is maintained by Mei. Whenever she decides to remember a fact about someone, she records it using her `<remember>` tool.
+This file reflects user facts saved in the SQLite memory database (`data/bot_memory.db`).
+The AI autonomously records details during chat using `<remember>` tags.
 
-## User: ItsDT (ID: 897711166967664690)
-- **Role/Relationship**: Creator (DT)
+## User: Alex (ID: 123456789012345678)
+- **Role/Relationship**: Bot Owner
 - **Known Facts**:
-  - (no specific facts noted yet)
+  - favorite game is Elden Ring
+  - works in web development
 
-## User: ExampleGamer (ID: 123456789012345678)
+## User: Sam (ID: 987654321098765432)
 - **Role/Relationship**: Server Member
 - **Known Facts**:
-  - plays roguelike games late at night
-  - favorite food is spicy ramen
+  - prefers dark mode in editors
+  - studying computer science

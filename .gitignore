@@ -1,4 +1,4 @@
-# Python cache and environments
+# Python cache & environments
 __pycache__/
 *.py[cod]
 *$py.class
@@ -10,24 +10,21 @@ venv/
 .env
 .env.local
 
-# Local SQLite databases and persistent memories
+# SQLite databases & persistent memory files
 *.db
 *.sqlite
 *.sqlite3
 data/
 users.md
 
-# Keep example files tracked
+# Keep templates tracked
 !users.example.md
 !.env.example
 
-# OS and Editor artifacts
+# OS & Editor files
 .DS_Store
 Thumbs.db
 *.swp
 *.tmp
 .vscode/
 .idea/
-
-# Ignore Training folder
-Mei-Training/

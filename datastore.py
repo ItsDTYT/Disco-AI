@@ -1,5 +1,5 @@
-# Datastore for Mei's persistent memories and user profiles.
-# Uses SQLite for ACID safety, auto-syncing directly to users.md for human inspection.
+# Datastore for Discord AI bot memories and user profiles.
+# Uses SQLite in WAL mode for safety, auto-syncing to users.md for plain text reading.
 import hashlib
 import logging
 import os
@@ -8,16 +8,15 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
-logger = logging.getLogger("MeiDatastore")
+logger = logging.getLogger("DiscoDatastore")
 
 DEFAULT_DB_DIR = Path(__file__).resolve().parent / "data"
-DEFAULT_DB_PATH = DEFAULT_DB_DIR / "mei_memory.db"
+DEFAULT_DB_PATH = DEFAULT_DB_DIR / "bot_memory.db"
 DEFAULT_MD_PATH = Path(__file__).resolve().parent / "users.md"
 
 
 def generate_deterministic_id(name: str) -> int:
-    # Python's built-in hash() changes across restarts (PYTHONHASHSEED).
-    # Using sha256 gives a stable pseudo-ID for guests who lack a Discord user ID.
+    # Stable pseudo-ID for guests who lack a numeric Discord ID
     digest = hashlib.sha256(name.lower().strip().encode("utf-8")).hexdigest()
     return int(digest[:14], 16)
 
@@ -29,7 +28,7 @@ class Datastore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_tables()
 
-        # Import legacy or existing users.md if the DB is fresh
+        # Bootstrap database from markdown dossier if DB is empty
         if self.md_path.exists() and self._is_db_empty():
             logger.info("Fresh database detected. Bootstrapping memories from users.md...")
             self.import_from_markdown(self.md_path)
@@ -67,7 +66,6 @@ class Datastore:
                     CREATE INDEX IF NOT EXISTS idx_memories_user_id ON memories(user_id);
                     CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_user_fact ON memories(user_id, fact);
                 """)
-                # TODO: This works for now, but consider adding FTS5 table if memories ever hit 10k+ entries
         except sqlite3.Error as e:
             logger.error(f"Failed to initialize SQLite tables: {e}")
             raise
@@ -84,7 +82,6 @@ class Datastore:
         with self._get_connection() as conn:
             row = conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
             if row:
-                # Update name if changed
                 if name and row["name"] != name:
                     conn.execute(
                         "UPDATE users SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
@@ -97,13 +94,7 @@ class Datastore:
                     )
                 return dict(row)
 
-            # Auto-assign DT's role if detected
-            default_role = (
-                "Creator (DT)"
-                if ("dt" in name.lower() or user_id == 897711166967664690)
-                else "Server Member"
-            )
-            final_role = role or default_role
+            final_role = role or "Server Member"
             conn.execute(
                 "INSERT INTO users (user_id, name, role) VALUES (?, ?, ?)",
                 (user_id, name, final_role),
@@ -118,7 +109,6 @@ class Datastore:
         role: str | None = None,
         category: str = "general",
     ) -> list[str]:
-        # Clean and filter duplicates before hitting disk
         clean_facts = []
         for f in facts:
             txt = f.strip().lstrip("-*• ").strip()
@@ -142,10 +132,9 @@ class Datastore:
                         """,
                         (user_id, fact_text, category),
                     )
-                    # Check if row was actually inserted
                     if conn.total_changes > 0:
                         inserted.append(fact_text)
-                        logger.info(f"[Mei Memory] Stored for {username} ({user_id}): {fact_text}")
+                        logger.info(f"[Memory Added] {username} ({user_id}): {fact_text}")
                 except sqlite3.Error as e:
                     logger.warning(f"Could not store fact '{fact_text}' for {user_id}: {e}")
 
@@ -192,16 +181,17 @@ class Datastore:
                 FROM users u
                 LEFT JOIN memories m ON u.user_id = m.user_id
                 GROUP BY u.user_id, u.name, u.role
-                ORDER BY (CASE WHEN LOWER(u.role) LIKE '%creator%' THEN 0 ELSE 1 END), LOWER(u.name)
+                ORDER BY (CASE WHEN LOWER(u.role) LIKE '%owner%' THEN 0 ELSE 1 END), LOWER(u.name)
             """).fetchall()
             return [dict(r) for r in rows]
 
     def export_to_markdown(self, target_file: Path | None = None):
         out_path = target_file or self.md_path
         lines = [
-            "# Mei's Dossier: Known Users",
+            "# User Dossier: Known Profiles",
             "",
-            "This file is maintained by Mei. Whenever she decides to remember a fact about someone, she records it using her `<remember>` tool.",
+            "This file reflects user facts saved in the SQLite memory database.",
+            "The AI saves facts during conversations using `<remember>` tags.",
             "",
         ]
 
@@ -227,7 +217,7 @@ class Datastore:
 
         content = "\n".join(lines)
 
-        # Atomic write to prevent file corruption on Windows if interrupted
+        # Atomic write to prevent file corruption
         out_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_fd, tmp_name = tempfile.mkstemp(dir=out_path.parent, prefix="users_", suffix=".tmp")
         try:

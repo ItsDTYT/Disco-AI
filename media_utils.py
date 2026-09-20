@@ -1,5 +1,5 @@
 # Media helper for Discord images and video attachments.
-# Scales pictures and pulls representative video frames for vision-capable models.
+# Scales pictures and extracts representative video keyframes for vision-capable models.
 import base64
 import io
 import logging
@@ -11,7 +11,7 @@ import cv2
 import discord
 from PIL import Image
 
-logger = logging.getLogger("MeiMediaUtils")
+logger = logging.getLogger("DiscoMediaUtils")
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 VIDEO_EXTS = {".mp4", ".mov", ".webm", ".m4v", ".mkv", ".avi"}
@@ -36,7 +36,6 @@ def _safe_remove(path: str, retries: int = 3):
 def encode_pil_image_to_base64_jpeg(
     img: Image.Image, max_dim: int = MAX_IMG_DIM, quality: int = 85
 ) -> str:
-    # Downscale large images while keeping aspect ratio intact
     if img.mode != "RGB":
         img = img.convert("RGB")
 
@@ -55,7 +54,6 @@ def encode_pil_image_to_base64_jpeg(
 def extract_frames_from_video_bytes(
     video_bytes: bytes, num_frames: int = VIDEO_SAMPLES
 ) -> list[str]:
-    # Samples N evenly spaced frames across the video duration
     frames_b64 = []
     tmp_fd, tmp_path = tempfile.mkstemp(suffix=".mp4")
     try:
@@ -65,9 +63,9 @@ def extract_frames_from_video_bytes(
         cap = cv2.VideoCapture(tmp_path)
         try:
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            # Mildly annoying edge case: ultra short clips or weird webm codecs report 0 frames
+            # Edge case: ultra short clips or rare codecs report 0 frames
             if total_frames <= 0:
-                logger.warning("Video has 0 frames or couldn't be parsed by OpenCV.")
+                logger.warning("Video has 0 frames or could not be parsed by OpenCV.")
                 return []
 
             step = max(1, total_frames // (num_frames + 1))
@@ -96,7 +94,6 @@ def extract_frames_from_video_bytes(
 async def process_discord_attachments(
     attachments: list[discord.Attachment],
 ) -> tuple[list[dict], str]:
-    # Returns (image_blocks_for_api, summary_text_description)
     blocks = []
     descriptions = []
 
@@ -111,7 +108,7 @@ async def process_discord_attachments(
                 blocks.append({"type": "image_url", "image_url": {"url": data_uri}})
                 descriptions.append(f"[Attached Image: {att.filename}]")
             except (Image.DecompressionBombError, OSError, ValueError) as e:
-                logger.error(f"Couldn't decode image {att.filename}: {e}")
+                logger.error(f"Could not decode image {att.filename}: {e}")
             except discord.DiscordException as e:
                 logger.error(f"Network error downloading image attachment {att.filename}: {e}")
 
