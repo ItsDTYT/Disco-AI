@@ -1,6 +1,6 @@
 # Welcome to the Disco-AI Wiki
 
-Welcome to the official documentation for **Disco-AI**, an open-source, beginner-friendly Discord AI bot template. Disco-AI links Discord to local models or cloud inference APIs, complete with persistent SQLite memory, vision, and customizable personas.
+Welcome to the official documentation for **Disco-AI**, an open-source, beginner-friendly Discord AI bot template. Disco-AI links Discord to local models or cloud inference APIs, complete with an **Obsidian Vault markdown database**, multimodal vision (images, GIFs, stickers, video frames), user profile dossiers, and customizable personas.
 
 ---
 

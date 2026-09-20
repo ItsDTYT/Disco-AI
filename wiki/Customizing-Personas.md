@@ -43,11 +43,11 @@ You are Byte, a friendly and patient coding mentor.
 
 ---
 
-## Autonomous Memory (`<remember>` Tags)
+## Autonomous Memory (`<remember>` Tags) & Obsidian Vault
 
-Disco-AI maintains user profiles in SQLite (`data/bot_memory.db`) and exports them in plain text to `users.md`.
+Disco-AI organizes its persistent memory inside an **Obsidian Vault** (`vault/`).
 
-When users share facts about themselves, the bot will autonomously output:
+When users share facts about themselves, the bot autonomously records them:
 ```xml
 <remember>enjoys building custom mechanical keyboards</remember>
 ```
@@ -56,7 +56,16 @@ Or for another user:
 <remember user="Alex">lives in Seattle and drinks black coffee</remember>
 ```
 
-These tags are stripped before the reply reaches Discord and saved directly to the database.
+These tags are stripped before the message reaches Discord and saved directly to the user's Obsidian markdown note (`vault/users/{id}.md`).
+
+### Opening in Obsidian
+
+1. Download [Obsidian](https://obsidian.md).
+2. Choose **Open folder as vault** and select the `vault/` directory.
+3. You will see:
+   - `Index.md`: A live dashboard listing all users, recorded facts, and timestamps.
+   - `users/{user_id}.md`: Dedicated user notes with YAML frontmatter and checklist facts (`- [x] fact`).
+   - Interactive Graph View: Explore visual link maps between users and memory tags (`#user`, `#disco-ai/memory`).
 
 ---
 

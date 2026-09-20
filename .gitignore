@@ -10,12 +10,11 @@ venv/
 .env
 .env.local
 
-# SQLite databases & persistent memory files
-*.db
-*.sqlite
-*.sqlite3
-data/
-users.md
+# Obsidian vault personal notes
+vault/users/*.md
+vault/users/*.tmp
+!vault/users/.gitkeep
+vault/Index.tmp
 
 # Keep templates tracked
 !users.example.md

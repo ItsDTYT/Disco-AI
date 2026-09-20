@@ -7,22 +7,26 @@
 <p align="center">
   <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-blue.svg" alt="Python Version" /></a>
   <a href="https://discordpy.readthedocs.io/"><img src="https://img.shields.io/badge/Discord.py-2.4%2B-5865F2.svg" alt="Discord.py" /></a>
+  <a href="https://obsidian.md"><img src="https://img.shields.io/badge/Vault-Obsidian%20Compatible-7C3AED.svg" alt="Obsidian Compatible" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-purple.svg" alt="License" /></a>
 </p>
 
-An open-source, beginner-friendly Discord AI bot template. Disco-AI connects Discord to local LLMs (LM Studio, Ollama, vLLM) or Cloud APIs (OpenAI, OpenRouter, Groq). It includes persistent SQLite memory, image and video understanding, web search fallback, and an easily editable prompt file.
+An open-source, beginner-friendly Discord AI bot template. Disco-AI connects Discord to local LLMs (LM Studio, Ollama, vLLM) or Cloud APIs (OpenAI, OpenRouter, Groq). It features an **Obsidian Vault markdown database**, multimodal vision (images, GIFs, stickers, video frames), user profile dossier extraction, entity and mention resolution, web search fallback, and an easily editable prompt file.
 
 ---
 
 ## Features
 
-- **Local LLMs & Cloud APIs**: Connect to local backends (LM Studio, Ollama, vLLM) or paste an API key for cloud providers (OpenRouter, OpenAI, Groq).
-- **Custom Personas Without Code**: Edit `prompt.txt` to change your bot's personality, lore, and speaking style without touching Python code.
-- **Vision & Video Understanding**: Resizes image attachments and extracts video keyframes with OpenCV so vision models can see pictures and short clips.
-- **Persistent Memory (SQLite + Markdown)**: Stores user details in SQLite (`data/bot_memory.db`) and exports an editable plain text summary to `users.md`.
+- **Talk Anywhere**: Responds in any channel or server where invited, mentioned, replied to, or called by name—plus full direct message (DM) support without restrictive channel locks.
+- **Multimodal Vision (Images, GIFs, Stickers, Videos)**: Processes static images, animated GIFs, Discord stickers, and video keyframes.
+  > **Note**: A multimodal vision model is required for visual inputs. If a text-only model is loaded, the bot informs users in Discord chat that a vision model is needed.
+- **Obsidian Vault Database**: Replaces traditional databases with a native Obsidian Vault (`vault/`). Every user receives a dedicated markdown note (`vault/users/{id}.md`) formatted with YAML frontmatter, wikilinks (`[[User]]`), and checkbox facts (`- [x] fact`). Open `vault/` in the [Obsidian app](https://obsidian.md) to explore an interactive graph view of all bot memories!
+- **User Profile Dossier Extraction**: Automatically inspects the speaker's Discord profile (account age, server join date, assigned roles, and current activity/presence) and injects this context so the AI knows who it is conversing with.
+- **Smart Mention & Emoji Resolver**: Resolves raw Snowflake IDs (`<@id>`, `<@&role_id>`, `<#channel_id>`) into readable names (`@DisplayName`, `@Role`, `#channel`) and translates custom animated emojis (`<:name:id>`) into `:name:` so the model understands conversation context.
+- **Custom Personas Without Code**: Edit `prompt.txt` to adjust personality, lore, and speaking style without touching Python code.
 - **DuckDuckGo Web Search**: Emits `<search>query</search>` tags when a question needs recent news, game updates, or facts, cached for 10 minutes.
 - **Hidden Thinking Traces**: Keeps model reasoning traces (`<think>` blocks) out of Discord chat and logs them to your terminal console.
-- **Owner-Only Commands**: Restricts `/facts` and `/reset` to the bot owner ID specified in your `.env`.
+- **Slash Commands Only**: Clean `/facts` and `/reset` slash commands restricted to the bot owner ID specified in `.env`.
 
 ---
 
@@ -34,7 +38,8 @@ An open-source, beginner-friendly Discord AI bot template. Disco-AI connects Dis
 3. Scroll down to **Privileged Gateway Intents** and enable:
    - **Message Content Intent**
    - **Server Members Intent**
-4. Under **OAuth2 > URL Generator**, check `bot` and `applications.commands`, select administrative or standard messaging permissions, and use the generated link to invite the bot to your Discord server.
+   - **Presence Intent** *(optional, enables activity/game status detection)*
+4. Under **OAuth2 > URL Generator**, check `bot` and `applications.commands`, select standard messaging permissions, and invite the bot to your server.
 
 ### 2. Configure Settings
 Copy the template configuration file:
@@ -52,16 +57,14 @@ API_BASE_URL=http://127.0.0.1:1234/v1
 MODEL_NAME=qwen3.5-4b
 API_KEY=
 
-# Or for Cloud APIs (example: OpenRouter):
-# API_BASE_URL=https://openrouter.ai/api/v1
-# MODEL_NAME=meta-llama/llama-3.3-70b-instruct
-# API_KEY=sk-or-v1-...
+# For Vision Models (LM Studio / Ollama / Cloud):
+# MODEL_NAME=qwen2.5-vl-7b-instruct
 ```
 
 ### 3. Start the Bot
 
 #### Windows (One-Click)
-Double-click `run.bat`. The script automatically sets up a virtual environment, installs dependencies, and starts the bot.
+Double-click `run.bat`. The script automatically configures a virtual environment, installs dependencies, and starts the bot.
 
 #### Linux / macOS / Terminal
 ```bash
@@ -78,37 +81,26 @@ docker compose up -d
 
 ---
 
-## Customizing Your Bot's Persona
-
-Open `prompt.txt` in any text editor. You can write your own system prompt or character backstory here. When you restart the bot, it will adopt the new personality immediately.
-
-Example:
-```text
-You are a grumpy tavern dwarf in a fantasy Discord server.
-Speak with a gruff accent, complain about spilled ale, and give short advice.
-```
-
----
-
 ## Architecture
 
 ```mermaid
 flowchart TD
-    subgraph Discord["Discord Client"]
-        User["User / Owner"] <--> Bot["bot.py"]
+    subgraph Discord["Discord Platform"]
+        User["Discord User"] <--> Bot["bot.py"]
     end
 
-    subgraph Peripherals["Peripherals & Tools"]
-        Bot <--> Media["media_utils.py<br/>(PIL + OpenCV Keyframes)"]
+    subgraph Peripherals["Input Processing & Tools"]
+        Bot <--> Media["media_utils.py<br/>(Images, GIFs, Stickers, Keyframes)"]
+        Bot <--> Resolver["Entity Resolver<br/>(Mentions, Roles, Emojis, Profiles)"]
         Bot <--> Search["Web Search<br/>(DuckDuckGo + Cache)"]
         Bot <--> Prompt["prompt.txt<br/>(Custom Persona)"]
     end
 
-    subgraph Storage["Persistence Layer"]
+    subgraph Storage["Obsidian Vault Database"]
         Bot <--> UserMgr["user_manager.py"]
-        UserMgr <--> DataStore["datastore.py<br/>(SQLite WAL Engine)"]
-        DataStore <--> DB[("data/bot_memory.db")]
-        DataStore <--> Dossier[("users.md")]
+        UserMgr <--> Vault["obsidian_vault.py"]
+        Vault <--> Notes["vault/users/{id}.md<br/>(YAML Frontmatter + Wikilinks)"]
+        Vault <--> Index["vault/Index.md<br/>(Interactive Dashboard)"]
     end
 
     subgraph Backend["Inference Server"]
@@ -122,28 +114,37 @@ flowchart TD
 
 | Command | Description | Access |
 | :--- | :--- | :--- |
-| `/facts [user]` | Displays memory notes for yourself or a selected user. | Owner Only |
+| `/facts [user]` | Displays Obsidian Vault memory notes for yourself or a selected user. | Owner Only |
 | `/reset` | Clears recent conversation history in the current channel or DM. | Owner Only |
-
-Legacy prefix triggers (`!facts`, `!reset`) are also supported for the bot owner.
 
 ---
 
 ## Recommended Models
 
-### Local (Consumer Hardware)
-- **Qwen 3.5 4B** (Recommended): Fast, lightweight, and low latency. Runs comfortably within 6 GB–8 GB VRAM while reliably following instructions and XML memory tags.
-- **Gemma 4 E4B**: Google's lightweight open model. Low memory footprint with strong reasoning and conversation abilities.
+### Local Models (Consumer Hardware)
+- **Qwen 3.5 4B** (Recommended for Text): Fast, lightweight, and low latency. Runs comfortably within 6 GB–8 GB VRAM while following instructions and memory tags.
+- **Qwen 2.5 VL (3B / 7B)** (Recommended for Vision): Excellent vision-language model capable of analyzing images, GIFs, and screenshots directly on local GPUs.
+- **Gemma 4 E4B**: Google's lightweight open model with strong reasoning and conversation capabilities.
+- **MiniCPM-V 2.6**: Strong local multimodal vision model with high OCR and visual comprehension.
 
-### Cloud (API Providers)
-- **Gemini 3.8 Flash**: Fast response times, huge context window, and very cost-effective for multi-turn chats.
-- **ChatGPT 5.6 (Luna / Terra)**: High intelligence, strong creative roleplay, and reliable instruction-following via the OpenAI API.
+### Cloud Models (API Providers)
+- **Gemini 2.0 Flash / Gemini 3.8 Flash**: Extremely fast, multimodal by default (images, audio, video), with generous context windows.
+- **ChatGPT 5.6 (Luna / Terra) / GPT-4o**: State-of-the-art reasoning, vision, and instruction adherence.
+
+---
+
+## Obsidian Vault Integration
+
+Disco-AI organizes memory as a native **Obsidian Vault**:
+1. Open the [Obsidian app](https://obsidian.md).
+2. Click **Open folder as vault** and select the `vault/` directory inside Disco-AI.
+3. Enjoy an interactive graph view connecting users, memory tags (`#user`, `#disco-ai/memory`), and live dossier notes!
 
 ---
 
 ## Documentation & Wiki
 
-For step-by-step guides on setting up Discord intents, configuring models, and writing custom personas, see the [Disco-AI Wiki](wiki/Home.md):
+For step-by-step guides, see the [Disco-AI Wiki](wiki/Home.md):
 - [Getting Started Guide](wiki/Getting-Started.md)
 - [Model Setup Guide (Local & Cloud)](wiki/Model-Setup-Guide.md)
 - [Customizing Personas & Memory](wiki/Customizing-Personas.md)

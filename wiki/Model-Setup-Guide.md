@@ -7,16 +7,22 @@ Disco-AI supports any OpenAI-compatible Chat Completions endpoint. This means yo
 ## Recommended Models
 
 ### Local Models (Consumer Hardware)
-1. **Qwen 3.5 4B** (Top Recommendation)
+1. **Qwen 3.5 4B** (Top Recommendation for Text)
    - **Why**: Lightweight, ultra-fast response latency, fits easily on 6 GB–8 GB consumer GPUs, and strictly adheres to tool tags (`<remember>`, `<search>`).
-2. **Gemma 4 E4B**
+2. **Qwen 2.5 VL (3B / 7B)** (Top Recommendation for Vision)
+   - **Why**: Native multimodal vision model. Can directly analyze user images, GIFs, screenshots, and Discord stickers on local consumer hardware.
+3. **Gemma 4 E4B**
    - **Why**: Google's lightweight open model architecture. Delivers strong natural conversational flow with low memory overhead.
+4. **MiniCPM-V 2.6**
+   - **Why**: Strong local multimodal model with excellent OCR and fine-detail recognition.
 
 ### Cloud Models (API Providers)
-1. **Gemini 3.8 Flash**
-   - **Why**: Extreme generation speed, massive context window, and very low cost per million tokens.
-2. **ChatGPT 5.6 (Luna / Terra)**
-   - **Why**: Deep creative nuance, complex roleplay capabilities, and reliable instruction following.
+1. **Gemini 2.0 Flash / Gemini 3.8 Flash**
+   - **Why**: Multimodal by default (images, video, audio), extreme generation speed, massive context window, and low cost.
+2. **ChatGPT 5.6 (Luna / Terra) / GPT-4o**
+   - **Why**: Deep creative nuance, complex roleplay capabilities, robust image understanding, and reliable instruction following.
+
+> 💡 **Multimodal Vision Notice**: If your bot receives images, GIFs, or stickers while running a text-only model, Disco-AI will automatically send an in-chat reminder explaining that a vision-capable model is required.
 
 ---
 

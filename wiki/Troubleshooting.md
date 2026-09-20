@@ -29,15 +29,24 @@ Common issues and solutions when running Disco-AI.
 **Fix**:
 - Discord can take up to a few minutes to register global slash commands for newly invited bots.
 - Ensure you invited the bot with both `bot` and `applications.commands` checked in the URL Generator.
-- In the meantime, you can use text prefix fallbacks: `!facts` and `!reset`.
 
 ---
 
-## 4. Resetting User Memory
+## 4. Resetting or Editing User Memory (Obsidian Vault)
 **Question**: How do I clear or edit memories?
-- To clear a user's memory via Discord: have the owner run `/reset` in chat.
-- To view or edit in plain text: open `users.md` in Notepad, make your edits, and save. The bot reads `users.md` if the database is reset.
-- To completely wipe all memories: delete the `data/bot_memory.db` file while the bot is stopped.
+- To clear conversation memory for a channel or DM: have the owner run `/reset` in chat.
+- To view or edit user memories directly: open `vault/users/{user_id}.md` in Obsidian or any text editor, edit or delete facts, and save. The bot reads changes immediately.
+- To completely wipe all memories: delete the `vault/` directory while the bot is stopped.
+
+---
+
+## 5. "Vision Model Required" Warning in Discord
+**Symptoms**: When you send an image, GIF, or sticker, the bot replies: *"The currently loaded model cannot process images because it lacks multimodal vision support."*
+**Fix**:
+- You are running a text-only language model (e.g. `qwen3.5-4b`, `gemma4:e4b`).
+- Switch your backend model to a multimodal vision model:
+  - Local (LM Studio / Ollama): `Qwen2.5-VL-7B-Instruct`, `Llama-3.2-11B-Vision`, or `MiniCPM-V-2_6`.
+  - Cloud API: `gpt-4o` or `gemini-2.0-flash`.
 
 ---
 

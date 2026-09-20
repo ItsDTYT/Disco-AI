@@ -1,12 +1,12 @@
-# Disco-AI: Beginner-friendly Discord AI bot powered by Local LLMs or Cloud APIs.
-# Supports images, video keyframes, SQLite persistent memory, and real-time web search.
 import asyncio
+import datetime
 import html
 import logging
 import os
 import re
 import sys
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -15,80 +15,236 @@ import httpx
 from discord import app_commands
 from dotenv import load_dotenv
 
-from media_utils import process_discord_attachments
+from media_utils import MediaPayload, process_message_media
 from user_manager import UserManager
 
-# Load configuration from .env file
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("DiscoBot")
-for noisy in ["ddgs", "primp", "httpx", "discord"]:
-    logging.getLogger(noisy).setLevel(logging.WARNING)
+for noisy_logger in ["ddgs", "primp", "httpx", "discord"]:
+    logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
-# Discord Credentials & Admin IDs
-DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "").strip()
-BOT_NAME = os.getenv("BOT_NAME", "Disco").strip()
-BOT_OWNER_ID = int(os.getenv("BOT_OWNER_ID", "0"))
+DISCORD_TOKEN: str = os.getenv("DISCORD_BOT_TOKEN", "").strip()
+BOT_NAME: str = os.getenv("BOT_NAME", "Disco").strip()
+BOT_OWNER_ID: int = int(os.getenv("BOT_OWNER_ID", "0"))
 
-# Allowed Channel/Guild IDs (leave empty to allow all channels where bot is present)
-raw_allowed = os.getenv("ALLOWED_CHANNEL_IDS", "").strip()
-ALLOWED_IDS = {int(x.strip()) for x in raw_allowed.split(",") if x.strip().isdigit()}
+raw_allowed: str = os.getenv("ALLOWED_CHANNEL_IDS", "").strip()
+ALLOWED_IDS: set[int] = {int(x.strip()) for x in raw_allowed.split(",") if x.strip().isdigit()}
 
-# LLM Backend Settings (Local or Cloud API)
-API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:1234/v1").rstrip("/")
-API_KEY = os.getenv("API_KEY", "").strip()
-MODEL_NAME = os.getenv("MODEL_NAME", "qwen3.5-4b").strip()
+API_BASE_URL: str = os.getenv("API_BASE_URL", "http://127.0.0.1:1234/v1").rstrip("/")
+API_KEY: str = os.getenv("API_KEY", "").strip()
+MODEL_NAME: str = os.getenv("MODEL_NAME", "qwen3.5-4b").strip()
 
-# Sampling Parameters
-TEMPERATURE = float(os.getenv("TEMPERATURE", "0.75"))
-TOP_P = float(os.getenv("TOP_P", "0.80"))
-TOP_K = int(os.getenv("TOP_K", "20"))
-MIN_P = float(os.getenv("MIN_P", "0.05"))
-REPETITION_PENALTY = float(os.getenv("REPETITION_PENALTY", "1.05"))
-MAX_TOKENS = int(os.getenv("MAX_TOKENS", "500"))
+TEMPERATURE: float = float(os.getenv("TEMPERATURE", "0.75"))
+TOP_P: float = float(os.getenv("TOP_P", "0.80"))
+TOP_K: int = int(os.getenv("TOP_K", "20"))
+MIN_P: float = float(os.getenv("MIN_P", "0.05"))
+REPETITION_PENALTY: float = float(os.getenv("REPETITION_PENALTY", "1.05"))
+MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "500"))
 
-# Memory and User Management
-PROMPT_FILE = Path(__file__).resolve().parent / "prompt.txt"
-user_manager = UserManager()
+VAULT_DIR: Path = Path(__file__).resolve().parent / "vault"
+PROMPT_FILE: Path = Path(__file__).resolve().parent / "prompt.txt"
+
+user_manager = UserManager(vault_dir=VAULT_DIR)
 memory_lock = asyncio.Lock()
 
 
 def load_system_prompt() -> str:
-    # Loads custom character persona from prompt.txt if available
     if PROMPT_FILE.exists():
         try:
             content = PROMPT_FILE.read_text(encoding="utf-8").strip()
-            # Filter out top comment headers starting with '#'
-            lines = [l for l in content.splitlines() if not l.startswith("#")]
+            lines = [line for line in content.splitlines() if not line.startswith("#")]
             cleaned = "\n".join(lines).strip()
             if cleaned:
                 return cleaned
-        except OSError as e:
-            logger.warning(f"Could not read prompt.txt: {e}")
+        except OSError as err:
+            logger.warning("Could not read prompt.txt: %s", err)
 
-    # Fallback default prompt
     return (
         f"You are {BOT_NAME}, a friendly, intelligent, and relaxed companion on Discord. "
         "Keep your replies concise and conversational (1-3 sentences typically). "
-        "Match the casual tone of Discord chat, avoiding stiff corporate or assistant clichés. "
+        "Match the casual tone of Discord chat, avoiding corporate or assistant clichés. "
         "You maintain internal memory notes on users using <remember>fact</remember>. "
         "If you encounter unfamiliar recent facts or media, trigger a search via <search>query</search>."
     )
 
 
-SYSTEM_PROMPT = load_system_prompt()
+SYSTEM_PROMPT: str = load_system_prompt()
 
-# Runtime conversation caches
 conversations: dict[str, list[dict[str, Any]]] = {}
 conversation_lru: list[str] = []
-MAX_CONVERSATION_SESSIONS = 50
-MAX_HISTORY_TURNS = 12
+MAX_CONVERSATION_SESSIONS: int = 50
+MAX_HISTORY_TURNS: int = 12
 search_cache: dict[str, tuple[float, str]] = {}
 http_client: httpx.AsyncClient | None = None
 
 
-def track_conversation_session(context_key: str):
+@dataclass(frozen=True)
+class UserProfileDossier:
+    user_id: int
+    username: str
+    display_name: str
+    account_created: str
+    account_age: str
+    server_joined: str | None = None
+    server_tenure: str | None = None
+    roles: list[str] = field(default_factory=list)
+    status: str | None = None
+    activity: str | None = None
+    is_owner: bool = False
+
+    def to_prompt_context(self) -> str:
+        lines = [
+            f"[User Profile: {self.display_name} (@{self.username})]",
+            f"- Discord ID: `{self.user_id}`",
+            f"- Account Created: {self.account_created} ({self.account_age})",
+        ]
+        if self.server_joined:
+            lines.append(f"- Server Joined: {self.server_joined} ({self.server_tenure})")
+        if self.roles:
+            lines.append(f"- Server Roles: {', '.join(self.roles)}")
+        if self.activity:
+            lines.append(f"- Current Activity: {self.activity}")
+        if self.status:
+            lines.append(f"- Status: {self.status}")
+        if self.is_owner:
+            lines.append("- Rank: Bot Owner")
+        return "\n".join(lines)
+
+
+def _format_time_elapsed(dt: datetime.datetime) -> str:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    delta = now - dt
+    days = delta.days
+    if days < 1:
+        return "today"
+    if days < 30:
+        return f"{days} day{'s' if days != 1 else ''} ago"
+    if days < 365:
+        months = days // 30
+        return f"~{months} month{'s' if months != 1 else ''} ago"
+    years = days // 365
+    return f"~{years} year{'s' if years != 1 else ''} ago"
+
+
+def extract_user_profile(user: discord.User | discord.Member, owner_id: int) -> UserProfileDossier:
+    created_at = user.created_at
+    created_str = created_at.strftime("%Y-%m-%d")
+    created_age = _format_time_elapsed(created_at)
+
+    joined_str = None
+    joined_tenure = None
+    roles: list[str] = []
+    status_str = None
+    activity_str = None
+
+    if isinstance(user, discord.Member):
+        if user.joined_at:
+            joined_str = user.joined_at.strftime("%Y-%m-%d")
+            joined_tenure = _format_time_elapsed(user.joined_at)
+
+        member_roles = [r.name for r in user.roles if r.name != "@everyone"]
+        if member_roles:
+            roles = member_roles[:8]
+
+        status_str = str(user.status)
+
+        if user.activities:
+            act_names = []
+            for act in user.activities:
+                if isinstance(act, discord.CustomActivity) and act.name:
+                    act_names.append(f'"{act.name}"')
+                elif isinstance(act, discord.Spotify):
+                    act_names.append(f"Listening to {act.title} by {act.artist}")
+                elif getattr(act, "name", None):
+                    act_names.append(f"{act.type.name.capitalize()} {act.name}")
+            if act_names:
+                activity_str = "; ".join(act_names[:3])
+
+    return UserProfileDossier(
+        user_id=user.id,
+        username=user.name,
+        display_name=user.display_name or user.name,
+        account_created=created_str,
+        account_age=created_age,
+        server_joined=joined_str,
+        server_tenure=joined_tenure,
+        roles=roles,
+        status=status_str,
+        activity=activity_str,
+        is_owner=(user.id == owner_id),
+    )
+
+
+def resolve_discord_entities(
+    content: str, message: discord.Message, bot_client: discord.Client, bot_display_name: str
+) -> tuple[str, list[str]]:
+    resolved_text = content
+    pinged_names: list[str] = []
+
+    if bot_client.user:
+        resolved_text = re.sub(rf"<@!?{bot_client.user.id}>", f"@{bot_display_name}", resolved_text)
+
+    def _replace_user_mention(match: re.Match) -> str:
+        uid_str = match.group(1)
+        uid = int(uid_str)
+        member = None
+        if message.guild:
+            member = message.guild.get_member(uid)
+        if not member:
+            for m in message.mentions:
+                if m.id == uid:
+                    member = m
+                    break
+        if member:
+            disp = member.display_name or member.name
+            if bot_client.user and member.id != bot_client.user.id:
+                pinged_names.append(f"@{disp}")
+            return f"@{disp}"
+        return f"@User_{uid_str}"
+
+    resolved_text = re.sub(r"<@!?(\d+)>", _replace_user_mention, resolved_text)
+
+    if message.guild:
+        def _replace_role_mention(match: re.Match) -> str:
+            rid = int(match.group(1))
+            role = message.guild.get_role(rid)
+            if role:
+                pinged_names.append(f"@{role.name}")
+                return f"@{role.name}"
+            return f"@Role_{rid}"
+
+        def _replace_channel_mention(match: re.Match) -> str:
+            cid = int(match.group(1))
+            ch = message.guild.get_channel(cid)
+            return f"#{ch.name}" if ch else f"#channel-{cid}"
+
+        resolved_text = re.sub(r"<@&(\d+)>", _replace_role_mention, resolved_text)
+        resolved_text = re.sub(r"<#(\d+)>", _replace_channel_mention, resolved_text)
+
+    resolved_text = re.sub(r"<a?:([a-zA-Z0-9_~]+):\d+>", r":\1:", resolved_text)
+
+    return resolved_text.strip(), list(dict.fromkeys(pinged_names))
+
+
+def is_vision_model_error(error_message: str) -> bool:
+    lowered = error_message.lower()
+    indicators = [
+        "vision",
+        "image_url",
+        "image",
+        "does not support",
+        "not support",
+        "unsupported",
+        "invalid_request_error",
+        "unknown field: image_url",
+        "cannot process image",
+    ]
+    return any(ind in lowered for ind in indicators)
+
+
+def track_conversation_session(context_key: str) -> None:
     if context_key in conversation_lru:
         conversation_lru.remove(context_key)
     conversation_lru.append(context_key)
@@ -106,8 +262,7 @@ async def get_http_client() -> httpx.AsyncClient:
 
 
 async def query_llm(messages: list[dict[str, Any]]) -> str:
-    # Supports both Local LLMs and Cloud APIs using standard OpenAI format
-    client = await get_http_client()
+    client_inst = await get_http_client()
     url = f"{API_BASE_URL}/chat/completions"
 
     headers = {"Content-Type": "application/json"}
@@ -126,7 +281,7 @@ async def query_llm(messages: list[dict[str, Any]]) -> str:
         "stream": False,
     }
 
-    resp = await client.post(url, headers=headers, json=payload)
+    resp = await client_inst.post(url, headers=headers, json=payload)
     if resp.status_code != 200:
         raise RuntimeError(f"LLM API error ({resp.status_code}): {resp.text}")
 
@@ -135,7 +290,6 @@ async def query_llm(messages: list[dict[str, Any]]) -> str:
 
 
 def search_web_sync(query: str, max_results: int = 3) -> str:
-    # 10-minute caching avoids throttling search engines
     now = time.time()
     q_norm = query.lower().strip()
     if q_norm in search_cache:
@@ -148,8 +302,8 @@ def search_web_sync(query: str, max_results: int = 3) -> str:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         }
-        with httpx.Client(timeout=10.0, follow_redirects=True, headers=headers) as client:
-            resp = client.get("https://html.duckduckgo.com/html/", params={"q": query})
+        with httpx.Client(timeout=10.0, follow_redirects=True, headers=headers) as sync_client:
+            resp = sync_client.get("https://html.duckduckgo.com/html/", params={"q": query})
             if resp.status_code == 200:
                 titles = re.findall(
                     r'<a[^>]+class="result__snippet[^>]*>(.*?)</a>', resp.text, re.IGNORECASE
@@ -165,8 +319,8 @@ def search_web_sync(query: str, max_results: int = 3) -> str:
                         found.append(f"- **{ct}**: {cs}")
                 if found:
                     results_text = "\n".join(found)
-    except (httpx.HTTPError, OSError) as e:
-        logger.debug(f"Direct HTML search failed: {e}")
+    except (httpx.HTTPError, OSError) as err:
+        logger.debug("Direct HTML search failed: %s", err)
 
     if not results_text:
         try:
@@ -177,8 +331,8 @@ def search_web_sync(query: str, max_results: int = 3) -> str:
                 results_text = "\n".join(
                     [f"- **{r.get('title', 'Result')}**: {r.get('body', '')}" for r in hits]
                 )
-        except (ImportError, httpx.HTTPError, OSError, ValueError, RuntimeError) as e:
-            logger.warning(f"DDGS fallback error for '{query}': {e}")
+        except (ImportError, httpx.HTTPError, OSError, ValueError, RuntimeError) as err:
+            logger.warning("DDGS fallback error for '%s': %s", query, err)
 
     final_res = results_text if results_text else "No relevant search results found on the web."
     search_cache[q_norm] = (now, final_res)
@@ -190,28 +344,26 @@ async def search_web(query: str, max_results: int = 3) -> str:
 
 
 def extract_search_query(text: str, fallback_query: str | None = None) -> str | None:
-    # Check explicit <search>query</search> tags
-    m = re.search(r"<search>(.*?)</search>", text, re.IGNORECASE | re.DOTALL)
-    if m and len(m.group(1).strip()) >= 2:
-        return m.group(1).strip()
+    match_tag = re.search(r"<search>(.*?)</search>", text, re.IGNORECASE | re.DOTALL)
+    if match_tag and len(match_tag.group(1).strip()) >= 2:
+        return match_tag.group(1).strip()
 
-    m_attr = re.search(r"<search\s+query=['\"](.*?)['\"]", text, re.IGNORECASE)
-    if m_attr and len(m_attr.group(1).strip()) >= 2:
-        return m_attr.group(1).strip()
+    match_attr = re.search(r"<search\s+query=['\"](.*?)['\"]", text, re.IGNORECASE)
+    if match_attr and len(match_attr.group(1).strip()) >= 2:
+        return match_attr.group(1).strip()
 
-    # Search hints inside thinking traces
     think_match = re.search(r"<think>([\s\S]*?)</think>", text, re.IGNORECASE)
     if think_match:
         think_text = think_match.group(1)
-        m_intent = re.search(
+        intent_match = re.search(
             r"(?:let me search|need to search|searching for|look up|search for)\s+['\"]?([^'\"\n.,;<>]{3,60})",
             think_text,
             re.IGNORECASE,
         )
-        if m_intent and len(m_intent.group(1).strip()) >= 3:
-            cand = m_intent.group(1).strip()
-            if cand.lower() not in ["it", "this", "things", "stuff", "info", "them", "something"]:
-                return cand
+        if intent_match and len(intent_match.group(1).strip()) >= 3:
+            candidate = intent_match.group(1).strip()
+            if candidate.lower() not in ["it", "this", "things", "stuff", "info", "them", "something"]:
+                return candidate
 
         if (
             re.search(
@@ -231,7 +383,6 @@ def parse_bot_response(raw_text: str) -> tuple[str, str]:
     thought = ""
     reply = raw_text.strip()
 
-    # Extract <think> reasoning trace
     think_match = re.search(r"<think>([\s\S]*?)</think>", raw_text, re.IGNORECASE)
     if think_match:
         thought = think_match.group(1).strip()
@@ -240,9 +391,7 @@ def parse_bot_response(raw_text: str) -> tuple[str, str]:
     for token in ["<think>", "</think>", "<turn|>", "<|turn>"]:
         reply = reply.replace(token, "")
 
-    reply = re.sub(
-        r"<(?:remember|note)[\s\S]*?</(?:remember|note)>", "", reply, flags=re.IGNORECASE
-    ).strip()
+    reply = re.sub(r"<(?:remember|note)[\s\S]*?</(?:remember|note)>", "", reply, flags=re.IGNORECASE).strip()
     reply = re.sub(r"<search[\s\S]*?</search>", "", reply, flags=re.IGNORECASE).strip()
     reply = re.sub(r"<search\b[^>]*\/?>", "", reply, flags=re.IGNORECASE).strip()
     reply = re.sub(r"<search:[^>\n]+>", "", reply, flags=re.IGNORECASE).strip()
@@ -253,7 +402,6 @@ def parse_bot_response(raw_text: str) -> tuple[str, str]:
     return thought, clean_reply
 
 
-# Setup Discord Client and Application Command Tree
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
@@ -264,14 +412,9 @@ client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
 
-# =====================================================================
-# SLASH COMMANDS (/) - ADMIN & OWNER RESTRICTED
-# =====================================================================
-
-
-@tree.command(name="facts", description="Check what facts the bot remembers about a user")
+@tree.command(name="facts", description="View Obsidian Vault memory notes for a user")
 @app_commands.describe(user="The user to check notes on (defaults to yourself)")
-async def slash_facts(interaction: discord.Interaction, user: discord.Member | None = None):
+async def slash_facts(interaction: discord.Interaction, user: discord.Member | None = None) -> None:
     if BOT_OWNER_ID and interaction.user.id != BOT_OWNER_ID:
         await interaction.response.send_message(
             "This command is restricted to the bot owner.", ephemeral=True
@@ -287,7 +430,7 @@ async def slash_facts(interaction: discord.Interaction, user: discord.Member | N
 
 
 @tree.command(name="reset", description="Clear conversation context memory for this channel or DM")
-async def slash_reset(interaction: discord.Interaction):
+async def slash_reset(interaction: discord.Interaction) -> None:
     if BOT_OWNER_ID and interaction.user.id != BOT_OWNER_ID:
         await interaction.response.send_message(
             "This command is restricted to the bot owner.", ephemeral=True
@@ -303,23 +446,18 @@ async def slash_reset(interaction: discord.Interaction):
     await interaction.response.send_message("Cleared conversation context.")
 
 
-# =====================================================================
-# CLIENT EVENTS
-# =====================================================================
-
-
 @client.event
-async def on_ready():
-    logger.info(f"{BOT_NAME} is online as: {client.user} (ID: {client.user.id})")
-    logger.info(f"Bot Owner ID: {BOT_OWNER_ID}")
-    logger.info(f"Inference Backend: {API_BASE_URL} (Model: {MODEL_NAME})")
-    logger.info("SQLite Datastore and Markdown dossier active.")
+async def on_ready() -> None:
+    logger.info("%s is online as: %s (ID: %d)", BOT_NAME, client.user, client.user.id)
+    logger.info("Bot Owner ID: %s", BOT_OWNER_ID or "(not set)")
+    logger.info("Inference Backend: %s (Model: %s)", API_BASE_URL, MODEL_NAME)
+    logger.info("Obsidian Vault Datastore active at: %s", VAULT_DIR)
 
     try:
         synced = await tree.sync()
-        logger.info(f"Synced {len(synced)} slash command(s) with Discord.")
-    except discord.DiscordException as e:
-        logger.warning(f"Error syncing slash commands: {e}")
+        logger.info("Synced %d slash command(s) with Discord.", len(synced))
+    except discord.DiscordException as err:
+        logger.warning("Error syncing slash commands: %s", err)
 
     await client.change_presence(
         activity=discord.Activity(type=discord.ActivityType.listening, name="your messages"),
@@ -327,34 +465,22 @@ async def on_ready():
     )
 
 
-def normalize_discord_mentions(text: str, message: discord.Message) -> str:
-    if not text:
-        return ""
-    if client.user:
-        text = re.sub(rf"<@!?{client.user.id}>", f"@{BOT_NAME}", text)
-    if message.guild:
-        for user in message.mentions:
-            uid_str = str(user.id)
-            disp = user.display_name or user.name
-            text = re.sub(rf"<@!?{uid_str}>", f"@{disp}", text)
-    return text.strip()
-
-
 @client.event
-async def on_message(message: discord.Message):
+async def on_message(message: discord.Message) -> None:
     if message.author == client.user:
         return
 
-    # Ignore other bots to prevent infinite response loops
     if message.author.bot:
         return
 
     is_dm = isinstance(message.channel, discord.DMChannel)
-    is_allowed = (
-        not ALLOWED_IDS
-        or message.channel.id in ALLOWED_IDS
-        or getattr(message.guild, "id", None) in ALLOWED_IDS
-    )
+    if ALLOWED_IDS:
+        channel_allowed = (
+            message.channel.id in ALLOWED_IDS
+            or (message.guild and message.guild.id in ALLOWED_IDS)
+        )
+        if not is_dm and not channel_allowed:
+            return
 
     is_reply_to_bot = False
     reply_context = ""
@@ -380,75 +506,50 @@ async def on_message(message: discord.Message):
                 reply_context = f'[Replying to {author_name}: "{clean_ref[:200]}"]'
 
     raw_content = message.content.strip()
-    user_id = message.author.id
-    user_name = message.author.display_name or message.author.name
-    is_owner = user_id == BOT_OWNER_ID
-
     is_mentioned = bool(client.user and client.user in message.mentions)
     name_in_content = bool(re.search(rf"\b{re.escape(BOT_NAME)}\b", raw_content, re.IGNORECASE))
 
-    # Respond in DMs, on mentions, when replied to, or when called by name
     should_respond = is_dm or is_reply_to_bot or is_mentioned or name_in_content
-    if not should_respond or not is_allowed:
+    if not should_respond:
         return
 
     context_key = f"dm_{message.author.id}" if is_dm else f"channel_{message.channel.id}"
     track_conversation_session(context_key)
 
-    normalized_content = normalize_discord_mentions(raw_content, message)
-    clean_content = re.sub(
-        rf"@{re.escape(BOT_NAME)}\b", "", normalized_content, flags=re.IGNORECASE
-    ).strip()
+    resolved_content, pinged_entities = resolve_discord_entities(raw_content, message, client, BOT_NAME)
+    clean_content = re.sub(rf"@{re.escape(BOT_NAME)}\b", "", resolved_content, flags=re.IGNORECASE).strip()
 
-    if not clean_content and not message.attachments:
+    h_client = await get_http_client()
+    media_payload: MediaPayload = await process_message_media(message, h_client)
+
+    if not clean_content and not media_payload.has_visuals and not media_payload.descriptions:
         return
 
-    # Backwards-compatible legacy prefix commands
-    clean_lower = clean_content.lower()
-    if clean_lower in ["!reset", "!clear"]:
-        if BOT_OWNER_ID and not is_owner:
-            return
-        conversations[context_key] = [{"role": "system", "content": SYSTEM_PROMPT}]
-        await message.channel.send("Cleared conversation context.")
-        return
-
-    if clean_lower in ["!facts", "!whoami"]:
-        if BOT_OWNER_ID and not is_owner:
-            return
-        async with memory_lock:
-            card = user_manager.get_user_display_card(user_id, user_name)
-        await message.channel.send(card)
-        return
-
-    # Process media attachments (images and video keyframes)
-    image_blocks = []
-    media_summary = ""
-    if message.attachments:
-        image_blocks, media_summary = await process_discord_attachments(message.attachments)
-        if image_blocks:
-            logger.info(
-                f"Processed {len(image_blocks)} visual block(s) from {len(message.attachments)} attachment(s)."
-            )
-
-    role_label = "Bot Owner" if is_owner else "Server Member"
+    profile_dossier = extract_user_profile(message.author, BOT_OWNER_ID)
     async with memory_lock:
-        user_memory = user_manager.get_summary_prompt(user_id, user_name)
+        user_memory = user_manager.get_summary_prompt(profile_dossier.user_id, profile_dossier.display_name)
 
-    text_parts = []
-    if reply_context:
-        text_parts.append(reply_context)
+    text_parts: list[str] = []
+    text_parts.append(profile_dossier.to_prompt_context())
+
     if user_memory:
         text_parts.append(user_memory)
-    if media_summary:
-        text_parts.append(media_summary)
-    text_parts.append(
-        f"[{user_name} ({role_label})]: {clean_content if clean_content else '(sent media)'}"
-    )
+    if reply_context:
+        text_parts.append(reply_context)
+    if media_payload.descriptions:
+        text_parts.append(media_payload.summary_text)
+
+    speaker_header = f"[{profile_dossier.display_name} (@{profile_dossier.username})]"
+    if pinged_entities:
+        speaker_header = f"[{profile_dossier.display_name} -> pinging {', '.join(pinged_entities)}]"
+
+    message_body = clean_content if clean_content else "(sent media attachment)"
+    text_parts.append(f"{speaker_header}: {message_body}")
     full_user_text = "\n".join(text_parts)
 
-    formatted_content: str | list[dict] = (
-        [{"type": "text", "text": full_user_text}] + image_blocks
-        if image_blocks
+    formatted_content: str | list[dict[str, Any]] = (
+        [{"type": "text", "text": full_user_text}] + media_payload.visual_blocks
+        if media_payload.has_visuals
         else full_user_text
     )
 
@@ -472,7 +573,7 @@ async def on_message(message: discord.Message):
 
             search_query = extract_search_query(raw_response, fallback_query=clean_content)
             if search_query and len(search_query.strip()) >= 2:
-                logger.info(f"Searching the web for: '{search_query}'")
+                logger.info("Searching the web for: '%s'", search_query)
                 search_results = await search_web(search_query, max_results=3)
 
                 asst_context = raw_response
@@ -486,29 +587,28 @@ async def on_message(message: discord.Message):
                         "content": (
                             f'[Real-Time Web Search Results for "{search_query}"]:\n'
                             f"{search_results}\n\n"
-                            f"[System Instruction]: Use the web search results above to accurately answer {user_name}. "
+                            f"[System Instruction]: Use the web search results above to accurately answer {profile_dossier.display_name}. "
                             "Stay in character, keep the tone natural, and answer concisely."
                         ),
                     },
                 ]
                 raw_response = await query_llm(search_history)
 
-            # Extract memory tags under concurrency lock
             async with memory_lock:
                 new_facts, raw_cleaned = user_manager.process_autonomous_remember_tags(
                     raw_output=raw_response,
-                    speaker_id=user_id,
-                    speaker_name=user_name,
+                    speaker_id=profile_dossier.user_id,
+                    speaker_name=profile_dossier.username,
+                    display_name=profile_dossier.display_name,
                 )
             if new_facts:
-                logger.info(f"Memory recorded for {user_name}: {new_facts}")
+                logger.info("Obsidian Vault recorded for %s: %s", profile_dossier.display_name, new_facts)
 
             thought, reply = parse_bot_response(raw_cleaned)
 
-            # Output reasoning trace strictly to console (never in Discord chat)
             if thought:
-                logger.info(f"\n[{BOT_NAME} Internal Reasoning for {user_name}]:\n{thought}\n")
-            logger.info(f"[{BOT_NAME} to {user_name}]: {reply}")
+                logger.info("\n[%s Internal Reasoning for %s]:\n%s\n", BOT_NAME, profile_dossier.display_name, thought)
+            logger.info("[%s to %s]: %s", BOT_NAME, profile_dossier.display_name, reply)
 
             history.append(
                 {
@@ -532,24 +632,49 @@ async def on_message(message: discord.Message):
                     for i in range(0, len(discord_output), 1950):
                         await message.channel.send(discord_output[i : i + 1950])
 
+        except RuntimeError as err:
+            err_str = str(err)
+            if media_payload.has_visuals and is_vision_model_error(err_str):
+                logger.warning("Vision rejection from LLM backend: %s", err_str)
+                vision_warning = (
+                    f"⚠️ **Vision Model Required**: The currently loaded model (`{MODEL_NAME}`) cannot process images, "
+                    "GIFs, or stickers because it lacks multimodal vision support.\n"
+                    "To use visual features, please load a multimodal vision model (e.g. `Qwen2.5-VL`, `Llama-3.2-Vision`, "
+                    "`MiniCPM-V`, or `gpt-4o`/`gemini-2.0-flash`)."
+                )
+                await (
+                    message.channel.send(vision_warning)
+                    if is_dm
+                    else message.reply(vision_warning, mention_author=False)
+                )
+                return
+
+            logger.error("Inference execution runtime error: %s", err)
+            err_msg = f"Request error: `{err}`"
+            await (
+                message.channel.send(err_msg)
+                if is_dm
+                else message.reply(err_msg, mention_author=False)
+            )
+
         except httpx.ConnectError:
-            logger.error("Could not connect to LLM backend.")
+            logger.error("Could not connect to LLM backend at %s", API_BASE_URL)
             err_msg = f"Cannot reach the AI backend at `{API_BASE_URL}`. Make sure your local server is running or your API endpoint is reachable."
             await (
                 message.channel.send(err_msg)
                 if is_dm
                 else message.reply(err_msg, mention_author=False)
             )
-        except (httpx.TimeoutException, httpx.HTTPError) as e:
-            logger.error(f"Inference HTTP error: {e}")
-            err_msg = f"Request timed out or returned an error: `{e}`"
+        except (httpx.TimeoutException, httpx.HTTPError) as err:
+            logger.error("Inference HTTP error: %s", err)
+            err_msg = f"Request timed out or returned an error: `{err}`"
             await (
                 message.channel.send(err_msg)
                 if is_dm
                 else message.reply(err_msg, mention_author=False)
             )
-        except discord.DiscordException as e:
-            logger.error(f"Discord API error: {e}")
+        except discord.DiscordException as err:
+            logger.error("Discord API error: %s", err)
 
 
 if __name__ == "__main__":
@@ -565,7 +690,9 @@ if __name__ == "__main__":
     print(f"API Backend: {API_BASE_URL}")
     print(f"Model: {MODEL_NAME}")
     print(f"Prompt File: {PROMPT_FILE.name}")
-    print("Commands: /facts, /reset (Owner restricted)")
+    print(f"Obsidian Vault: {VAULT_DIR}")
+    print("Commands: /facts, /reset (Slash commands exclusively)")
+    print("Unrestricted: Responds anywhere mentioned, replied to, or called by name")
     print("Press Ctrl+C to stop.\n")
 
     client.run(DISCORD_TOKEN)

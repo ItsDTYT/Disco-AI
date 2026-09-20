@@ -1,137 +1,133 @@
-# User Manager for Disco-AI.
-# Queries persistent memory profiles and extracts autonomous <remember> tags from bot outputs.
 import logging
 import re
 from pathlib import Path
 
-from datastore import Datastore, generate_deterministic_id
+from obsidian_vault import ObsidianVault, UserNote, generate_deterministic_id
 
 logger = logging.getLogger("DiscoUserManager")
 
-DEFAULT_USERS_MD = Path(__file__).resolve().parent / "users.md"
+DEFAULT_VAULT_DIR = Path(__file__).resolve().parent / "vault"
+LEGACY_USERS_MD = Path(__file__).resolve().parent / "users.md"
+LEGACY_EXAMPLE_MD = Path(__file__).resolve().parent / "users.example.md"
 
 
 class UserManager:
-    def __init__(self, filepath: Path = DEFAULT_USERS_MD, datastore: Datastore | None = None):
-        self.filepath = filepath
-        self.store = datastore or Datastore(md_path=filepath)
+    def __init__(self, vault_dir: Path | str = DEFAULT_VAULT_DIR):
+        self.vault = ObsidianVault(vault_dir)
+        self._bootstrap_if_empty()
 
-    @property
-    def users(self) -> dict[int, dict]:
-        profiles = {}
-        for summary in self.store.get_all_users_summary():
-            uid = summary["user_id"]
-            p = self.store.get_user_profile(uid)
-            if p:
-                profiles[uid] = p
-        return profiles
+    def _bootstrap_if_empty(self) -> None:
+        if not self.vault.get_all_users():
+            if LEGACY_USERS_MD.exists():
+                logger.info("Migrating legacy memories from users.md into Obsidian Vault...")
+                self.vault.import_from_legacy_markdown(LEGACY_USERS_MD)
+            elif LEGACY_EXAMPLE_MD.exists():
+                logger.info("Seeding initial Obsidian Vault profiles from users.example.md...")
+                self.vault.import_from_legacy_markdown(LEGACY_EXAMPLE_MD)
 
-    def load(self):
-        if self.filepath.exists():
-            self.store.import_from_markdown(self.filepath)
-
-    def save(self):
-        self.store.export_to_markdown(self.filepath)
-
-    def find_user_id_by_name(self, name: str) -> int | None:
-        return self.store.find_user_id_by_name(name)
-
-    def get_profile(self, user_id: int) -> dict | None:
-        return self.store.get_user_profile(user_id)
+    def get_profile(self, user_id: int) -> UserNote | None:
+        return self.vault.get_user_note(user_id)
 
     def get_summary_prompt(self, user_id: int, username: str) -> str:
-        profile = self.store.get_user_profile(user_id)
-        if not profile or not profile.get("facts"):
+        note = self.vault.get_user_note(user_id)
+        if not note or not note.facts:
             return ""
 
-        role = profile.get("role", "Server Member")
-        facts = profile.get("facts", [])
-        facts_preview = "; ".join(facts[:10])
-        return f"[Memory notes on {username} ({role}) - subject to change: {facts_preview}]"
+        facts_preview = "; ".join(f.content for f in note.facts[:10])
+        return f"[Memory notes on {username} ({note.role}) - subject to change: {facts_preview}]"
 
     def add_facts(
         self,
         user_id: int,
         username: str,
+        display_name: str,
         new_facts: list[str],
         role: str | None = None,
         category: str = "general",
-    ):
-        self.store.add_facts(user_id, username, new_facts, role=role, category=category)
+    ) -> list[str]:
+        return self.vault.add_facts(
+            user_id=user_id,
+            username=username,
+            display_name=display_name,
+            facts=new_facts,
+            category=category,
+            role=role,
+        )
 
-    def clear_user_facts(self, user_id: int):
-        self.store.clear_user_memories(user_id)
-        logger.info(f"Cleared dossier facts for user {user_id}.")
+    def clear_user_facts(self, user_id: int) -> bool:
+        return self.vault.clear_user_facts(user_id)
+
+    def find_user_id_by_name(self, name: str) -> int | None:
+        return self.vault.find_user_id_by_name(name)
 
     def process_autonomous_remember_tags(
         self,
         raw_output: str,
-        speaker_id: int | None = None,
-        speaker_name: str | None = None,
-        user_id: int | None = None,
-        username: str | None = None,
+        speaker_id: int,
+        speaker_name: str,
+        display_name: str | None = None,
     ) -> tuple[list[str], str]:
-        actual_id = speaker_id if speaker_id is not None else (user_id or 0)
-        actual_name = (
-            speaker_name if speaker_name is not None else (username or f"User_{actual_id}")
-        )
-
-        tag_pat = re.compile(
+        actual_display = display_name or speaker_name
+        tag_pattern = re.compile(
             r"<(?:remember|note)(?:\s+([^>]+))?>([\s\S]*?)</(?:remember|note)>",
             re.IGNORECASE,
         )
-        attr_pat = re.compile(
-            r"(?:user|speaker|for|target|about|person)=['\"]?([^'\"\s>]+)['\"]?", re.IGNORECASE
+        attr_pattern = re.compile(
+            r"(?:user|speaker|for|target|about|person)=['\"]?([^'\"\s>]+)['\"]?",
+            re.IGNORECASE,
         )
-        cat_pat = re.compile(r"(?:cat|category|type)=['\"]?([^'\"\s>]+)['\"]?", re.IGNORECASE)
+        cat_pattern = re.compile(
+            r"(?:cat|category|type)=['\"]?([^'\"\s>]+)['\"]?",
+            re.IGNORECASE,
+        )
 
-        recorded = []
+        recorded: list[str] = []
 
-        for attrs_str, content in tag_pat.findall(raw_output):
+        for attrs_str, content in tag_pattern.findall(raw_output):
             attrs = attrs_str or ""
-            u_match = attr_pat.search(attrs)
-            c_match = cat_pat.search(attrs)
+            u_match = attr_pattern.search(attrs)
+            c_match = cat_pattern.search(attrs)
 
-            target_name = u_match.group(1).strip() if u_match else actual_name
+            target_name = u_match.group(1).strip() if u_match else actual_display
             category = c_match.group(1).strip().lower() if c_match else "general"
 
-            if target_name.lower() in [actual_name.lower(), "me", "you", "speaker", "user", "self"]:
-                target_uid = actual_id
-                final_target_name = actual_name
+            if target_name.lower() in [actual_display.lower(), speaker_name.lower(), "me", "you", "speaker", "user", "self"]:
+                target_uid = speaker_id
+                target_user = speaker_name
+                target_disp = actual_display
             else:
                 found_id = self.find_user_id_by_name(target_name)
                 if found_id:
                     target_uid = found_id
-                    final_target_name = target_name
+                    existing = self.vault.get_user_note(found_id)
+                    target_user = existing.username if existing else target_name.lower().replace(" ", "_")
+                    target_disp = existing.display_name if existing else target_name
                 else:
                     target_uid = generate_deterministic_id(target_name)
-                    final_target_name = target_name
+                    target_user = target_name.lower().replace(" ", "_")
+                    target_disp = target_name
 
-            raw_facts = re.split(r"[\n;]+", content)
-            inserted = self.store.add_facts(
+            raw_facts = [f.strip() for f in re.split(r"[\n;]+", content) if f.strip()]
+            inserted = self.vault.add_facts(
                 user_id=target_uid,
-                username=final_target_name,
+                username=target_user,
+                display_name=target_disp,
                 facts=raw_facts,
                 category=category,
             )
             for f in inserted:
-                recorded.append(f"{final_target_name}: {f}")
+                recorded.append(f"{target_disp}: {f}")
 
-        # Strip memory tags from user-facing text
-        cleaned_text = tag_pat.sub("", raw_output).strip()
-        cleaned_text = re.sub(
-            r"<(?:remember|note)\b[^>]*\/?>", "", cleaned_text, flags=re.IGNORECASE
-        ).strip()
+        cleaned_text = tag_pattern.sub("", raw_output).strip()
+        cleaned_text = re.sub(r"<(?:remember|note)\b[^>]*\/?>", "", cleaned_text, flags=re.IGNORECASE).strip()
         return recorded, cleaned_text
 
     def get_user_display_card(self, user_id: int, display_name: str) -> str:
-        profile = self.store.get_user_profile(user_id)
-        if not profile or not profile.get("facts"):
-            return f"**{display_name}**: No specific memory notes recorded yet."
+        note = self.vault.get_user_note(user_id)
+        if not note or not note.facts:
+            return f"**{display_name}**: No specific memory notes recorded yet in Obsidian Vault."
 
-        facts = profile.get("facts", [])
-        role = profile.get("role", "Server Member")
-        lines = [f"**{display_name}** ({role}):"]
-        for f in facts:
-            lines.append(f"• {f}")
+        lines = [f"**{display_name}** (`@{note.username}` | {note.role}):"]
+        for fact in note.facts:
+            lines.append(f"• {fact.content}")
         return "\n".join(lines)
