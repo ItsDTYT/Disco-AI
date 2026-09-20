@@ -1,6 +1,10 @@
 # Disco-AI
 
 <p align="center">
+  <img src="assets/banner.png" alt="Disco-AI Banner" width="100%" />
+</p>
+
+<p align="center">
   <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-blue.svg" alt="Python Version" /></a>
   <a href="https://discordpy.readthedocs.io/"><img src="https://img.shields.io/badge/Discord.py-2.4%2B-5865F2.svg" alt="Discord.py" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-purple.svg" alt="License" /></a>
@@ -127,12 +131,23 @@ Legacy prefix triggers (`!facts`, `!reset`) are also supported for the bot owner
 
 ## Recommended Models
 
-- **Local Consumer GPUs (6 GB - 8 GB VRAM)**:
-  - `Qwen 3.5 4B` (Fast, low VRAM, accurate tool use)
-  - `Qwen 2.5 7B`
-- **Cloud Endpoints**:
-  - `meta-llama/llama-3.3-70b-instruct` (OpenRouter / Groq)
-  - `gpt-4o-mini` (OpenAI)
+### Local (Consumer Hardware)
+- **Qwen 3.5 4B** (Recommended): Fast, lightweight, and low latency. Runs comfortably within 6 GB–8 GB VRAM while reliably following instructions and XML memory tags.
+- **Gemma 4 E4B**: Google's lightweight open model. Low memory footprint with strong reasoning and conversation abilities.
+
+### Cloud (API Providers)
+- **Gemini 3.8 Flash**: Fast response times, huge context window, and very cost-effective for multi-turn chats.
+- **ChatGPT 5.6 (Luna / Terra)**: High intelligence, strong creative roleplay, and reliable instruction-following via the OpenAI API.
+
+---
+
+## Documentation & Wiki
+
+For step-by-step guides on setting up Discord intents, configuring models, and writing custom personas, see the [Disco-AI Wiki](wiki/Home.md):
+- [Getting Started Guide](wiki/Getting-Started.md)
+- [Model Setup Guide (Local & Cloud)](wiki/Model-Setup-Guide.md)
+- [Customizing Personas & Memory](wiki/Customizing-Personas.md)
+- [Troubleshooting & FAQ](wiki/Troubleshooting.md)
 
 ---
 
