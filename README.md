@@ -11,60 +11,59 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-purple.svg" alt="License" /></a>
 </p>
 
-An open-source, beginner-friendly Discord AI bot template. Disco-AI connects Discord to local LLMs (LM Studio, Ollama, vLLM) or Cloud APIs (OpenAI, OpenRouter, Groq). It features an **Obsidian Vault markdown database**, multimodal vision (images, GIFs, stickers, video frames), user profile dossier extraction, entity and mention resolution, web search fallback, and an easily editable prompt file.
+Disco-AI is a Discord bot that connects to local LLMs (LM Studio, Ollama, vLLM) or cloud APIs (OpenAI, Groq, OpenRouter). It saves user memories as plain Markdown notes inside an Obsidian vault, supports images and video keyframes, resolves Discord mentions, and lets you change the bot persona by editing a single text file.
 
 ---
 
 ## Features
 
-- **Talk Anywhere**: Responds in any channel or server where invited, mentioned, replied to, or called by name—plus full direct message (DM) support without restrictive channel locks.
-- **Multimodal Vision (Images, GIFs, Stickers, Videos)**: Processes static images, animated GIFs, Discord stickers, and video keyframes.
-  > **Note**: A multimodal vision model is required for visual inputs. If a text-only model is loaded, the bot informs users in Discord chat that a vision model is needed.
-- **Obsidian Vault Database**: Replaces traditional databases with a native Obsidian Vault (`vault/`). Every user receives a dedicated markdown note (`vault/users/{id}.md`) formatted with YAML frontmatter, wikilinks (`[[User]]`), and checkbox facts (`- [x] fact`). Open `vault/` in the [Obsidian app](https://obsidian.md) to explore an interactive graph view of all bot memories!
-- **User Profile Dossier Extraction**: Automatically inspects the speaker's Discord profile (account age, server join date, assigned roles, and current activity/presence) and injects this context so the AI knows who it is conversing with.
-- **Smart Mention & Emoji Resolver**: Resolves raw Discord Snowflake IDs (`<@user_id>`, `<@&role_id>`, `<#channel_id>`) into readable names (user handles, role names, and `#channel`) and translates custom animated emojis (`<:name:id>`) into `:name:` so the model understands conversation context.
-- **Custom Personas Without Code**: Edit `prompt.txt` to adjust personality, lore, and speaking style without touching Python code.
-- **DuckDuckGo Web Search**: Emits `<search>query</search>` tags when a question needs recent news, game updates, or facts, cached for 10 minutes.
-- **Hidden Thinking Traces**: Keeps model reasoning traces (`<think>` blocks) out of Discord chat and logs them to your terminal console.
-- **Slash Commands Only**: Clean `/facts` and `/reset` slash commands restricted to the bot owner ID specified in `.env`.
+- **Talk anywhere**: Chat with the bot in any channel, reply to it, ping it, or message it in DMs without channel restrictions.
+- **Image and video support**: Handles pictures, animated GIFs, Discord stickers, and video frames. If your current model doesn't support vision, the bot lets you know in chat.
+- **Obsidian vault memory**: Saves member notes to `vault/users/{id}.md` with YAML frontmatter, tags (`#user`, `#disco-ai/memory`), and task checkboxes. You can open the `vault/` folder directly in Obsidian to see everything in the graph view.
+- **Mention and emoji cleanup**: Converts raw Discord IDs (`<@user_id>`, `<@&role_id>`, `<#channel_id>`) into readable user handles, role names, and channel names, and converts custom emojis into `:name:`.
+- **User profile context**: Grabs basic profile info (account age, server join date, roles, and status/activity) so the bot knows who it is talking to.
+- **Custom persona in plain text**: Change personality, tone, and rules in `prompt.txt` without editing Python code.
+- **DuckDuckGo search**: The bot can look up real-time information by outputting `<search>query</search>`, with results cached for 10 minutes.
+- **Terminal-only thinking**: Model reasoning blocks (`<think>...</think>`) stay in your terminal console instead of cluttering chat.
+- **Slash commands**: Clean `/facts` and `/reset` commands locked to the bot owner.
 
 ---
 
 ## Quickstart
 
-### 1. Create a Discord Bot
-1. Go to the [Discord Developer Portal](https://discord.com/developers/applications) and create a New Application.
-2. Under the **Bot** tab, click **Reset Token** to copy your bot token.
-3. Scroll down to **Privileged Gateway Intents** and enable:
-   - **Message Content Intent**
-   - **Server Members Intent**
-   - **Presence Intent** *(optional, enables activity/game status detection)*
-4. Under **OAuth2 > URL Generator**, check `bot` and `applications.commands`, select standard messaging permissions, and invite the bot to your server.
+### 1. Create your Discord bot
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications) and click **New Application**.
+2. Go to the **Bot** tab and click **Reset Token** to copy your token.
+3. Turn on these **Privileged Gateway Intents**:
+   - Message Content Intent
+   - Server Members Intent
+   - Presence Intent (optional, allows reading user activity/status)
+4. Go to **OAuth2 > URL Generator**, check `bot` and `applications.commands`, pick standard message permissions, and invite the bot to your server.
 
-### 2. Configure Settings
-Copy the template configuration file:
+### 2. Configure settings
+Copy the example environment file:
 ```bash
 cp .env.example .env
 ```
-Open `.env` and fill in your details:
+Edit `.env` with your bot token, owner ID, and model settings:
 ```ini
 DISCORD_BOT_TOKEN=your_discord_bot_token
 BOT_OWNER_ID=your_numeric_discord_user_id
 BOT_NAME=Disco
 
-# For Local LLMs (LM Studio on port 1234):
+# Local LLMs (e.g. LM Studio on port 1234):
 API_BASE_URL=http://127.0.0.1:1234/v1
 MODEL_NAME=qwen3.5-4b
 API_KEY=
 
-# For Vision Models (LM Studio / Ollama / Cloud):
+# Or for vision models:
 # MODEL_NAME=qwen2.5-vl-7b-instruct
 ```
 
-### 3. Start the Bot
+### 3. Run the bot
 
-#### Windows (One-Click)
-Double-click `run.bat`. The script automatically configures a virtual environment, installs dependencies, and starts the bot.
+#### Windows
+Double-click `run.bat`. It will set up the virtual environment, install requirements, and launch the bot.
 
 #### Linux / macOS / Terminal
 ```bash
@@ -85,26 +84,26 @@ docker compose up -d
 
 ```mermaid
 flowchart TD
-    subgraph Discord["Discord Platform"]
-        User["Discord User"] <--> Bot["bot.py"]
+    subgraph Discord["Discord"]
+        User["User"] <--> Bot["bot.py"]
     end
 
-    subgraph Peripherals["Input Processing & Tools"]
-        Bot <--> Media["media_utils.py<br/>(Images, GIFs, Stickers, Keyframes)"]
-        Bot <--> Resolver["Entity Resolver<br/>(Mentions, Roles, Emojis, Profiles)"]
-        Bot <--> Search["Web Search<br/>(DuckDuckGo + Cache)"]
-        Bot <--> Prompt["prompt.txt<br/>(Custom Persona)"]
+    subgraph Peripherals["Message Processing"]
+        Bot <--> Media["media_utils.py (Images, GIFs, Stickers)"]
+        Bot <--> Resolver["Entity Resolver (Pings, Roles, Profiles)"]
+        Bot <--> Search["Web Search (DuckDuckGo)"]
+        Bot <--> Prompt["prompt.txt (Bot Persona)"]
     end
 
-    subgraph Storage["Obsidian Vault Database"]
+    subgraph Storage["Memory"]
         Bot <--> UserMgr["user_manager.py"]
         UserMgr <--> Vault["obsidian_vault.py"]
-        Vault <--> Notes["vault/users/{id}.md<br/>(YAML Frontmatter + Wikilinks)"]
-        Vault <--> Index["vault/Index.md<br/>(Interactive Dashboard)"]
+        Vault <--> Notes["vault/users/{id}.md"]
+        Vault <--> Index["vault/Index.md"]
     end
 
-    subgraph Backend["Inference Server"]
-        Bot <-->|OpenAI Chat Completions| Engine["Local (LM Studio / Ollama)<br/>or Cloud (OpenAI / OpenRouter / Groq)"]
+    subgraph Backend["LLM Backend"]
+        Bot <--> Engine["LM Studio / Ollama / OpenAI / OpenRouter / Groq"]
     end
 ```
 
@@ -112,41 +111,40 @@ flowchart TD
 
 ## Commands
 
-| Command | Description | Access |
+| Command | What it does | Who can use it |
 | :--- | :--- | :--- |
-| `/facts [user]` | Displays Obsidian Vault memory notes for yourself or a selected user. | Owner Only |
-| `/reset` | Clears recent conversation history in the current channel or DM. | Owner Only |
+| `/facts [user]` | Shows saved Obsidian vault notes for you or a selected user | Bot Owner |
+| `/reset` | Clears recent conversation memory in the current channel or DM | Bot Owner |
 
 ---
 
 ## Recommended Models
 
-### Local Models (Consumer Hardware)
-- **Qwen 3.5 4B** (Recommended for Text): Fast, lightweight, and low latency. Runs comfortably within 6 GB–8 GB VRAM while following instructions and memory tags.
-- **Qwen 2.5 VL (3B / 7B)** (Recommended for Vision): Excellent vision-language model capable of analyzing images, GIFs, and screenshots directly on local GPUs.
-- **Gemma 4 E4B**: Google's lightweight open model with strong reasoning and conversation capabilities.
-- **MiniCPM-V 2.6**: Strong local multimodal vision model with high OCR and visual comprehension.
+### Local
+- **Qwen 3.5 4B / Qwen 2.5 7B**: Great for text chat and fast responses.
+- **Qwen 2.5-VL (3B or 7B)**: Recommended if you want image and GIF understanding locally.
+- **MiniCPM-V 2.6**: Strong local vision model.
 
-### Cloud Models (API Providers)
-- **Gemini 2.0 Flash / Gemini 3.8 Flash**: Extremely fast, multimodal by default (images, audio, video), with generous context windows.
-- **ChatGPT 5.6 (Luna / Terra) / GPT-4o**: State-of-the-art reasoning, vision, and instruction adherence.
-
----
-
-## Obsidian Vault Integration
-
-Disco-AI organizes memory as a native **Obsidian Vault**:
-1. Open the [Obsidian app](https://obsidian.md).
-2. Click **Open folder as vault** and select the `vault/` directory inside Disco-AI.
-3. Enjoy an interactive graph view connecting users, memory tags (`#user`, `#disco-ai/memory`), and live dossier notes!
+### Cloud
+- **Gemini 2.0 Flash**: Fast, cheap, and handles vision and text easily.
+- **GPT-4o**: Reliable reasoning and multimodal support.
 
 ---
 
-## Documentation & Wiki
+## Viewing Memories in Obsidian
 
-For step-by-step guides, see the [Disco-AI Wiki](wiki/Home.md):
+Disco-AI stores memories directly as markdown notes:
+1. Open the [Obsidian](https://obsidian.md) desktop app.
+2. Select **Open folder as vault** and choose the `vault/` directory inside this project.
+3. Open `Index.md` or check out the Graph View to see users and saved facts linked together.
+
+---
+
+## Documentation
+
+Check the [Wiki](wiki/Home.md) for more details:
 - [Getting Started Guide](wiki/Getting-Started.md)
-- [Model Setup Guide (Local & Cloud)](wiki/Model-Setup-Guide.md)
+- [Model Setup Guide](wiki/Model-Setup-Guide.md)
 - [Customizing Personas & Memory](wiki/Customizing-Personas.md)
 - [Troubleshooting & FAQ](wiki/Troubleshooting.md)
 
@@ -154,4 +152,4 @@ For step-by-step guides, see the [Disco-AI Wiki](wiki/Home.md):
 
 ## License
 
-Distributed under the [MIT License](LICENSE).
+MIT License. See [LICENSE](LICENSE) for details.
