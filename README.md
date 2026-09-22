@@ -11,21 +11,21 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-purple.svg" alt="License" /></a>
 </p>
 
-Disco-AI is a Discord bot that connects to local LLMs (LM Studio, Ollama, vLLM) or cloud APIs (OpenAI, Groq, OpenRouter). It saves user memories as plain Markdown notes inside an Obsidian vault, supports images and video keyframes, resolves Discord mentions, and lets you change the bot persona by editing a single text file.
+Disco-AI is a Discord bot that works with LLMs like LM Studio, Ollama and vLLM or with cloud APIs such as OpenAI, Groq and Google. It saves user memories as Markdown notes inside an Obsidian vault. It handles images and video keyframes too. It recognizes Discord mentions. Lets you change the bot’s persona by simply editing one text file.
 
 ---
 
 ## Features
 
-- **Talk anywhere**: Chat with the bot in any channel, reply to it, ping it, or message it in DMs without channel restrictions.
-- **Image and video support**: Handles pictures, animated GIFs, Discord stickers, and video frames. If your current model doesn't support vision, the bot lets you know in chat.
-- **Obsidian vault memory**: Saves member notes to `vault/users/{id}.md` with YAML frontmatter, tags (`#user`, `#disco-ai/memory`), and task checkboxes. You can open the `vault/` folder directly in Obsidian to see everything in the graph view.
-- **Mention and emoji cleanup**: Converts raw Discord IDs (`<@user_id>`, `<@&role_id>`, `<#channel_id>`) into readable user handles, role names, and channel names, and converts custom emojis into `:name:`.
-- **User profile context**: Grabs basic profile info (account age, server join date, roles, and status/activity) so the bot knows who it is talking to.
-- **Custom persona in plain text**: Change personality, tone, and rules in `prompt.txt` without editing Python code.
-- **DuckDuckGo search**: The bot can look up real-time information by outputting `<search>query</search>`, with results cached for 10 minutes.
-- **Terminal-only thinking**: Model reasoning blocks (`<think>...</think>`) stay in your terminal console instead of cluttering chat.
-- **Slash commands**: Clean `/facts` and `/reset` commands locked to the bot owner.
+- **Talk anywhere**: The bot can chat in any channel. The bot can reply, ping or message it in messages. There are no channel restrictions.
+- **Image and video support**: The bot handles pictures, animated GIFs, Discord stickers and video frames. If the current model does not support vision, the bot informs you in chat.
+- **vault memory**: The bot saves member notes to `vault/users/{id}.md` with YAML frontmatter tags such as `#user` and `#disco-ai/memory` and task checkboxes. You can open the `vault/` folder directly in Obsidian to view everything in the graph view.
+- **Mention and emoji cleanup**: The bot converts raw Discord IDs (`<@user_id>` `<@&role_id>` `<#channel_id>`) into user handles, role names and channel names. The bot also converts custom emojis into `:name:`.
+- **User profile context**: The bot grabs profile info such as account age, server join date, roles and status/activity so the bot knows who it is talking to.
+- **Custom persona, in text**: The bot allows you to change personality, tone and rules in `prompt.txt` without editing Python code.
+- **DuckDuckGo search**: The bot can look up real‑time information by outputting `<search>query</search>`. Results are cached for ten minutes.
+- **Terminal- thinking**: Model reasoning blocks (`<think>...</think>`) stay in your terminal console instead of cluttering chat.
+- **Slash commands**: Clean `/facts`. /Reset` commands are locked to the bot owner.
 
 ---
 
@@ -53,11 +53,11 @@ BOT_NAME=Disco
 
 # Local LLMs (e.g. LM Studio on port 1234):
 API_BASE_URL=http://127.0.0.1:1234/v1
-MODEL_NAME=qwen3.5-4b
+MODEL_NAME=qwen2.5-7b-instruct
 API_KEY=
 
 # Or for vision models:
-# MODEL_NAME=qwen2.5-vl-7b-instruct
+# MODEL_NAME=qwen3.5-4b
 ```
 
 ### 3. Run the bot
@@ -121,13 +121,13 @@ flowchart TD
 ## Recommended Models
 
 ### Local
-- **Qwen 3.5 4B / Qwen 2.5 7B**: Great for text chat and fast responses.
-- **Qwen 2.5-VL (3B or 7B)**: Recommended if you want image and GIF understanding locally.
+- **Llama3.1 8b / Qwen 2.5 7B**: Great for text chat and fast responses.
+- **Qwen 3.5 (4B or 8B) / Gemma4 12-e4-2b**: Recommended if you want image and GIF understanding locally.
 - **MiniCPM-V 2.6**: Strong local vision model.
 
 ### Cloud
-- **Gemini 2.0 Flash**: Fast, cheap, and handles vision and text easily.
-- **GPT-4o**: Reliable reasoning and multimodal support.
+- **Gemini 3.8 Flash**: Fast, cheap, and handles vision and text easily.
+- **GPT-5.6-Terra**: Reliable reasoning and multimodal support.
 
 ---
 
